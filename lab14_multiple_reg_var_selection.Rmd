@@ -1,0 +1,236 @@
+---
+title: "Lab 14: Multiple Regression and Variable Selection"
+output:
+  pdf_document:
+    fig_height: 2.8
+    fig_width: 6
+  html_document:
+    fig_height: 3
+    fig_width: 5
+  word_document:
+    fig_height: 3
+    fig_width: 5
+header-includes:
+  - \usepackage{booktabs}
+  - \usepackage{vwcol}
+geometry: margin=0.5in
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache = FALSE)
+library(ggplot2)
+library(readr)
+library(dplyr)
+library(gridExtra)
+options(width = 100)
+```
+
+## Part 1: What Not To Do.  Party in power and economic performance.
+
+Go to https://projects.fivethirtyeight.com/p-hacking/
+
+#### (a) Suppose you are a Democratic data analyst with an agenda: You want to show that the economy performs better when Democrats are in power.
+
+ * Choose "Democrats" for the political party.  The horizontal axis of the plot now measures the amount of power held by Democrats, and the vertical axis the performance of the economy.  Your goal is to find statistically significant evidence of an association between these variables (p-value as small as you can make it), with a positive slope
+ * By changing the settings for which politicians are included, how economic performance is measured, and the options for weighting politicians by how powerful they are and whether or not recessions are excluded, manipulate the variables used until you have found statistically significant evidence of a positive association between these variables.
+
+You win!  Case proved, write it up and get published.
+
+#### (b) Suppose you are a Republican data analyst with an agenda: You want to show that the economy performs better when Democrats are in power.
+
+ * Choose "Republicans" for the political party.  The horizontal axis of the plot now measures the amount of power held by Republicans, and the vertical axis the performance of the economy.  Your goal is to find statistically significant evidence of an association between these variables (p-value as small as you can make it), with a positive slope
+ * By changing the settings for which politicians are included, how economic performance is measured, and the options for weighting politicians by how powerful they are and whether or not recessions are excluded, manipulate the variables used until you have found statistically significant evidence of a positive association between these variables.
+
+You win!  Case proved, write it up and get published.
+
+#### What's the point?
+
+ * You can find "statistically significant" evidence of anything if that is your goal and you are flexible enough in your data analysis.  That doesn't mean your conclusions are correct.
+ * Formally, a p-value only measures the strength of evidence against the null hypothesis of the test *if the analysis was pre-specified* before looking at the data.  If the test or the model you fit was dependent on the data in any way, the p-value is unreliable as an indicator of strength of evidence.
+ * Our goal is not to find statistically significant results.  Our goal is to present an honest discussion of what the data can and cannot tell us about the world, complete with limitations of our analysis.  A result is only convincing if it shows up in a variety of reasonable analyses of the data.
+ * We *must* present results from all reasonable models for the data based on a variety of reasonable decisions about what variables are included in the model and how those variables are defined.
+ * Any time someone has a really complicated data set and they present only a few findings from a single model, you should be very suspicious.
+
+
+
+
+
+## Part 2: What To Do.  Nursing Salaries.
+
+We have data about 52 licensed nursing home facilities in New Mexico, collected by the Department of Health and Social Services of the State of New Mexico.  Let's use these data to estimate the relationship between the salaries of nurses at a given facility (`NurseSalaries`, our response variable) and a variety of other characteristics of the facility.  The variables in the data set are:
+
+ * `Beds`: Number of beds in the nursing home
+ * `InPatientDays`: Annual medical in-patient days (in hundreds)
+ * `AllPatientDays`: Annual total patient days (in hundreds)
+ * `PatientRevenue`: Annual patinet care revenue (in hundreds of dollars)
+ * `Rural`: Either "Rural" or "Non-Rural"
+ * `NurseSalaries`: Annual nursing salaries (in hundreds of dollars)
+
+```{r, echo = FALSE, message = FALSE}
+nursing <- read_csv("http://www.evanlray.com/data/stat2/Nursing.csv")
+
+nursing <- nursing %>%
+  select(Beds, InPatientDays, AllPatientDays, PatientRevenue, Rural, NurseSalaries) %>%
+  mutate(
+    Rural = ifelse(Rural, "Rural", "Non-Rural")
+  )
+
+head(nursing)
+```
+
+#### 1. Make a pairs plot of the data.
+
+```{r}
+library(GGally)
+ggpairs(nursing)
+```
+
+#### 2. Based on your pairs plot, perform an initial check of the conditions of linearity, equal variance, and no outliers/high leverage observations.  You don't need to do anything about these outlying/high leverage observations yet, we'll deal with them later.
+
+For the most part, linearity looks ok.
+
+For each of the explanatory variables, there is 
+
+#### 3. Based on your pairs plot, make some statements about which of the explanatory variables have the strongest association with nursing salaries.
+
+
+
+#### 4. Fit a model that has NurseSalaries as the response, all other variables in the data set as explanatory variables, and does not include any interaction terms.
+
+```{r}
+lm_fit <- lm(NurseSalaries ~ Beds + InPatientDays + AllPatientDays + PatientRevenue + Rural, data = nursing)
+summary(lm_fit)
+```
+
+#### 5. Calculate the variance inflation factors (VIF) for the coefficient estimates in this model.  Do these indicate potential issues with multicollinearity?  What is the interpretation of the VIF for Beds?  For AllPatientDays?
+
+```{r}
+vif(lm_fit)
+```
+
+
+
+#### 6. Make plots showing the leverage, studentized residual, and Cook's distance for each observation.  Do these diagnostics suggest that any observations are worth investigating further?
+
+```{r}
+# Code for Number 6
+nursing <- nursing %>%
+  mutate(
+    obs_index = row_number(),
+    h = hatvalues(lm_fit),
+    studres = rstudent(lm_fit),
+    D = cooks.distance(lm_fit)
+  )
+
+ggplot(data = nursing, mapping = aes(x = obs_index, y = h)) +
+  geom_hline(yintercept = 2*6/ nrow(nursing))+
+  geom_point()
+
+ggplot(data = nursing, mapping = aes(x = obs_index, y = studres)) +
+  geom_point()
+
+ggplot(data = nursing, mapping = aes(x = obs_index, y = D)) +
+  geom_point()
+```
+
+All three plots suggest that we should investigate observation number 26 in more depth.  Additionally, the plot of leverages suggests that we might investigate observations 1, 31, 37, and 47.
+
+#### 7. Make scatter plots of each quantitative explanatory variable vs. the response, highlighting any observations you identified above.
+
+```{r}
+obs_to_investigate <- c(1, 26, 31, 37, 47)
+
+nursing <- nursing %>%
+  mutate(
+    suspicious = row_number() %in% obs_to_investigate
+  )
+
+ggplot(data = nursing, mapping = aes(x = Beds, y = NurseSalaries, color = suspicious)) +
+  geom_point() +
+  geom_label(data = nursing %>% filter(suspicious), mapping = aes(label = obs_index))
+
+ggplot(data = nursing, mapping = aes(x = InPatientDays, y = NurseSalaries, color = suspicious)) +
+  geom_point() +
+  geom_label(data = nursing %>% filter(suspicious), mapping = aes(label = obs_index))
+
+ggplot(data = nursing, mapping = aes(x = AllPatientDays, y = NurseSalaries, color = suspicious)) +
+  geom_point() +
+  geom_label(data = nursing %>% filter(suspicious), mapping = aes(label = obs_index))
+
+ggplot(data = nursing, mapping = aes(x = PatientRevenue, y = NurseSalaries, color = suspicious)) +
+  geom_point() +
+  geom_label(data = nursing %>% filter(suspicious), mapping = aes(label = obs_index))
+```
+
+#### 8. We want to conduct an analysis of the data both with and without the outliers.  To start, let's leave the outliers in.  Perform an all subsets regression to identify a set of models that have roughly equivalent performance using the full data set.
+
+```{r}
+library(leaps)
+candidate_models <- regsubsets(NurseSalaries ~ Beds + InPatientDays + AllPatientDays + PatientRevenue + Rural, data = nursing)
+summary(candidate_models)
+summary(candidate_models)$bic
+plot(candidate_models)
+```
+
+#### 9. Fit any candidate models that you identified in part 7 and print out the model summaries.  What do these models indicate about which variables are associated with the response?
+
+```{r}
+fit1 <- lm(NurseSalaries ~ PatientRevenue + Rural, data = nursing)
+summary(fit1)
+```
+
+```{r}
+fit2 <- lm(NurseSalaries ~ PatientRevenue + Rural + InPatientDays, data = nursing)
+summary(fit2)
+```
+
+#### 10. Create a version of the data set that does not include any suspect observations.  Go through the all subsets regression process again with your new data set to identify candidate models based on the filtered data set.
+
+```{r}
+nursing_no_suspicious <- nursing %>%
+  filter(
+    !suspicious
+  )
+
+candidate_models_no_suspicious <- regsubsets(NurseSalaries ~ Beds + InPatientDays + AllPatientDays + PatientRevenue + Rural, data = nursing)
+summary(candidate_models_no_suspicious)
+summary(candidate_models_no_suspicious)$bic
+plot(candidate_models_no_suspicious)
+```
+
+#### 11. Fit any candidate models that you identified in part 9 and print out the model summaries.  What do these models indicate about which variables are associated with the response?
+
+```{r}
+fit3 <- lm(NurseSalaries ~ PatientRevenue + Rural, data = nursing_no_suspicious)
+summary(fit3)
+```
+
+```{r}
+fit4 <- lm(NurseSalaries ~ PatientRevenue + InPatientDays + AllPatientDays, data = nursing_no_suspicious)
+summary(fit4)
+```
+
+#### 12. Sum up your process, noting which of your findings if any were consistent across the different models you fit and which results were more dependent on the other explanatory variables included in the model or whether outlying/influential observations were included.
+
+
+
+#### 13. Using your version of the data set without the suspicious observations, fit a model that has only Beds as an explanatory variable, and print the model summary.  Also fit a model that has includes Beds, PatientRevenue, InPatientDays, and AllPatientDays as explanatory variables, and print the model summary.  What is the interpretation of the coefficient estimate labeled as Beds in each of these models?
+
+```{r}
+fit_one <- lm(NurseSalaries ~ Beds, data = nursing_no_suspicious)
+summary(fit_one)
+```
+
+```{r}
+fit_several <- lm(NurseSalaries ~ Beds + PatientRevenue + InPatientDays + AllPatientDays, data = nursing_no_suspicious)
+summary(fit_several)
+```
+
+#### 14. Based on each of your model fits in part 13, conduct a test of whether in the population, the coefficient of Beds is equal to 0.  In each case, state your conclusion in context in terms of the strength of evidence against the null hypothesis.
+
+
+
+#### 15. Based on the version of the data set without suspicious observations, create a scatter plot of NurseSalaries vs. Beds.  Also create added variables plots based on the model fit from part 13 with 4 explanatory variables.  How do these plots relate to what we saw in parts 13 and 14?
+
+
+
