@@ -22,6 +22,7 @@ library(ggplot2)
 library(readr)
 library(dplyr)
 library(gridExtra)
+library(car)
 options(width = 100)
 ```
 
@@ -87,13 +88,15 @@ ggpairs(nursing)
 
 #### 2. Based on your pairs plot, perform an initial check of the conditions of linearity, equal variance, and no outliers/high leverage observations.  You don't need to do anything about these outlying/high leverage observations yet, we'll deal with them later.
 
-For the most part, linearity looks ok.
+Based on the plots in the bottom row, showing the response vs. each of the explanatory variables, the conditions of linearity and constant variance of the residuals look OK.
 
-For each of the explanatory variables, there is 
+There are several outlying and high leverage observations.  High leverage observations are those with explanatory variable values that stand out from the other points.  For example, in the plot of InPatientDays vs. AllPatientDays, there is one observations that is far from the others; this is a high leverage observation since we are thinking about two explanatory variables (InPatientDays and AllPatientDays).  Across all of the plots, it appears that there are about 2 high leverage observations.
+
+Additionally, there is an outlying observation in the scatter plot of AllPatientDays vs. NurseSalaries, with a value of AllPatientDays around 400 and a small value of NurseSalaries around 2000.  This is not a high leverage observation because there are many observations with AllPatientDays about 400, but it is an outlier because its nurse salary is very different from the nurse salaries of other observations with that value of AllPatientDays.  Similarly, some outliers are visible in the plot of PatientRevenue vs. NurseSalaries.
 
 #### 3. Based on your pairs plot, make some statements about which of the explanatory variables have the strongest association with nursing salaries.
 
-
+It appears that AllPatient and PatientRevenue have the strongest association with nursing salaries, based on the scatter plots.
 
 #### 4. Fit a model that has NurseSalaries as the response, all other variables in the data set as explanatory variables, and does not include any interaction terms.
 
@@ -108,7 +111,7 @@ summary(lm_fit)
 vif(lm_fit)
 ```
 
-
+The variance inflation factors for AllPatientDays and PatientRevenue are both greater than 5, which is a typical threshold for indicating problems with multicollinearity.  The VIF of 9.5 for AllPatientDays means that the variance of the coefficient estimate for AllPatientDays is about 9.5 times larger than it would be if AllPatientDays were not correlated with the other explanatory variables.  In turn this means that our confidence interval for the coefficient of AllPatientDays is about 3 times wider than it would have been if AllPatientDays were not correlated with the other explanatory variables.  Similarly, a confidence interval for the coefficient of Beds is about 2 times wider than it would have been if Beds were not correlated with the other explanatory variables.
 
 #### 6. Make plots showing the leverage, studentized residual, and Cook's distance for each observation.  Do these diagnostics suggest that any observations are worth investigating further?
 
@@ -184,15 +187,23 @@ fit2 <- lm(NurseSalaries ~ PatientRevenue + Rural + InPatientDays, data = nursin
 summary(fit2)
 ```
 
+Both models we identified as having low BIC provided very strong evidence of a positive association between patient revenue and mean nurse salaries in the population of nursing homes similar to those in this study, after accounting for the effects of the setting (rural or urban) and the number of in-patient days.
+
+Additionally, we have strong evidence of an association between the setting (rural or urban) and nurse salaries after accounting for the effect of patient revenue; there is only moderately strong evidence of this association after also accounting for in patient days.
+
+Neither of the models we considered provides evidence of an association between any of the other explanatory variables in the data set and nurse salaries in the population of nursing homes, after accounting for patient revenue and urban/rural setting.
+
 #### 10. Create a version of the data set that does not include any suspect observations.  Go through the all subsets regression process again with your new data set to identify candidate models based on the filtered data set.
 
 ```{r}
+# We had previously indicated that observations 1, 26, 31, 37, and 47 were "suspicious"
+
 nursing_no_suspicious <- nursing %>%
   filter(
     !suspicious
   )
 
-candidate_models_no_suspicious <- regsubsets(NurseSalaries ~ Beds + InPatientDays + AllPatientDays + PatientRevenue + Rural, data = nursing)
+candidate_models_no_suspicious <- regsubsets(NurseSalaries ~ Beds + InPatientDays + AllPatientDays + PatientRevenue + Rural, data = nursing_no_suspicious)
 summary(candidate_models_no_suspicious)
 summary(candidate_models_no_suspicious)$bic
 plot(candidate_models_no_suspicious)
@@ -201,7 +212,7 @@ plot(candidate_models_no_suspicious)
 #### 11. Fit any candidate models that you identified in part 9 and print out the model summaries.  What do these models indicate about which variables are associated with the response?
 
 ```{r}
-fit3 <- lm(NurseSalaries ~ PatientRevenue + Rural, data = nursing_no_suspicious)
+fit3 <- lm(NurseSalaries ~ PatientRevenue, data = nursing_no_suspicious)
 summary(fit3)
 ```
 
@@ -212,7 +223,15 @@ summary(fit4)
 
 #### 12. Sum up your process, noting which of your findings if any were consistent across the different models you fit and which results were more dependent on the other explanatory variables included in the model or whether outlying/influential observations were included.
 
+I probably just have just asked #12, not both 12 and 9.  The answer below just my answer to number 9, modified to also include discussion of results from the models in number 11.
 
+Based on the full data set, both models we identified as having low BIC provided very strong evidence of a positive association between patient revenue and mean nurse salaries in the population of nursing homes similar to those in this study, after accounting for the effects of the setting (rural or urban) and the number of in-patient days.  This was also the case in the models we identified after removing 5 outlying or high leverage observations; here, one of the selected models included only patient revenue as an explanatory variable, and the other accounted for inpatient days and all patient days.
+
+Based on the full data set, we have strong evidence of an association between the setting (rural or urban) and nurse salaries after accounting for the effect of patient revenue; there is only moderately strong evidence of this association after also accounting for in patient days.  However, after removing 5 outlying or high leverage observations, the rural variable was not selected for inclusion in our models, suggesting that once these outliers were removed, there was not strong evidence of an association between an urban or rural setting and nurse salaries, after accounting for the other explanatory variables in the model.
+
+One of the models we considered after removing the outlying and high leverage observations included InPatientDays and AllPatientDays as explanatory variables, and offered some evidence of an association between these variables and nurse salaries after accounting for patient revenue.  However, BIC did not lead us to select these variables for any of our other models, indicating only week evidence of an association between these variables and the response overall, after accounting for the other explanatory variables.
+
+None of the models we considered included beds as an explanatory variable, indicating that there is no evidence of an association between beds and nurse salaries after accounting for the other explanatory variables.
 
 #### 13. Using your version of the data set without the suspicious observations, fit a model that has only Beds as an explanatory variable, and print the model summary.  Also fit a model that has includes Beds, PatientRevenue, InPatientDays, and AllPatientDays as explanatory variables, and print the model summary.  What is the interpretation of the coefficient estimate labeled as Beds in each of these models?
 
@@ -226,11 +245,36 @@ fit_several <- lm(NurseSalaries ~ Beds + PatientRevenue + InPatientDays + AllPat
 summary(fit_several)
 ```
 
+Interpretation of beds, model with only beds as an explanatory variable: We estimate that a 1 unit increase in beds is associated with an increase in nursing salary of about 39 units in the population of nursing homes similar to those in this study.
+
+Interpretation of beds, model with 4 explanatory variables: After accounting for the effects of patient revenue, in patient days, and all patient days, we estimate that a 1 unit increase in beds is associated with an increase in nursing salary of about 4.7 units in the population of nursing homes similar to those in this study.
+
 #### 14. Based on each of your model fits in part 13, conduct a test of whether in the population, the coefficient of Beds is equal to 0.  In each case, state your conclusion in context in terms of the strength of evidence against the null hypothesis.
 
+Based on model with only beds as an explanatory variable:
 
+$H_0: \beta_1 = 0$
+
+$H_A: \beta_1 \neq 0$
+
+The p-value for the test is 9.53e-10.  The data offer extremely strong evidence against the null hypothesis of no association between the number of beds and nursing salaries.
+
+Based on model with multiple explanatory variables:
+
+$H_0: \beta_1 = 0$
+
+$H_A: \beta_1 \neq 0$
+
+The p-value for the test is 0.65.  The data offer no evidence against the null hypothesis of no association between the number of beds and nursing salaries after accounting for the effects of patient revenue, in-patient days, and all patient days.
 
 #### 15. Based on the version of the data set without suspicious observations, create a scatter plot of NurseSalaries vs. Beds.  Also create added variables plots based on the model fit from part 13 with 4 explanatory variables.  How do these plots relate to what we saw in parts 13 and 14?
 
+```{r}
+ggplot(data = nursing, mapping = aes(x = Beds, y = NurseSalaries)) +
+  geom_point()
+avPlots(fit_several)
+```
 
+The scatter plot of beds vs. nurse salaries shows an association between these variables.  This is the relationship estimated by the model that includes only beds as an explanatory variable.
 
+The added variables plot for beds in the model with 4 explanatory variables shows only a weak relationship between beds and nurse salaries after the other explanatory variables have been accounted for.  In this added variables plot, the horizontal axis is the residual from a regression where beds is the response variable and PatientRevenue, InPatientDays, and AllPatientDays are the explanatory variables.  Essentially, this represents the new information contributed by beds after the other explanatory variables have been accounted for.  The vertical axis in the added variables plot is the residual from a linear regression model where the response is nurse salaries and the explanatory variables are patient revenue, in-patient days, and all patient days.  The residuals from this model represent what's "left over" in nursing salaries after accounting for patient revenue, in-patient days, and all patient days.  The fact that there is not a strong relationship between these residuals in the added variables plot indicates that after accounting for patient revenue, inpatient days, and all patient days, there is not a strong relationship between beds and nurse salaries.  This is reflected in the coefficient estimate and hypothesis test results discussed in parts 13 and 14.
